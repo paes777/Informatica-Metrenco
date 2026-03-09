@@ -66,9 +66,8 @@ const btnLogout = document.getElementById('btnLogout');
 // Dashboard Admin
 const reservasTbody = document.getElementById('reservasTbody');
 const noReservasMsg = document.getElementById('noReservasMsg');
-const pdfStartDate = document.getElementById('pdfStartDate');
-const pdfEndDate = document.getElementById('pdfEndDate');
-const btnDownloadPDF = document.getElementById('btnDownloadPDF');
+const btnExportPDF = document.getElementById('btnExportPDF');
+const exportYear = document.getElementById('exportYear');
 
 // --- INICIALIZACIÓN ---
 function init() {
@@ -89,7 +88,11 @@ function setupEventListeners() {
 
     // Eventos Admin Login
     loginForm.addEventListener('submit', handleLogin);
-    btnDownloadPDF.addEventListener('click', handleDownloadPDF);
+
+    // Eventos Dashboard
+    if (btnExportPDF) {
+        btnExportPDF.addEventListener('click', handleExportPDF);
+    }
 }
 
 // --- LOGICA CORE FIREBASE LECTURAS EN TIEMPO REAL ---
@@ -328,6 +331,9 @@ function renderDashboard() {
 
     noReservasMsg.classList.add('d-none');
     document.querySelector('.table-responsive').classList.remove('d-none');
+    
+    // Poblar Selector de Años
+    populateYearSelect();
 
     const sortedReservas = [...reservas].sort((a, b) => {
         const dateA = new Date(a.fecha);
@@ -402,6 +408,94 @@ function renderDashboard() {
     });
 }
 
+function populateYearSelect() {
+    if (!exportYear) return;
+    
+    // Obtener años unícos de la data cargada
+    const years = [...new Set(reservas.map(r => r.fecha.split('-')[0]))].sort().reverse();
+    
+    // Guardar opción actual para intentar mantenerla tras el re-render
+    const currentVal = exportYear.value;
+
+    exportYear.innerHTML = '<option value="Todos">Todos</option>';
+    years.forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        exportYear.appendChild(opt);
+    });
+
+    if (currentVal && currentVal !== "Todos" && years.includes(currentVal)) {
+        exportYear.value = currentVal;
+    }
+}
+
+function handleExportPDF() {
+    const selectedYear = exportYear ? exportYear.value : 'Todos';
+    
+    let filteredReservas = reservas;
+    if (selectedYear !== 'Todos') {
+        filteredReservas = reservas.filter(r => r.fecha.startsWith(selectedYear));
+    }
+    
+    if (filteredReservas.length === 0) {
+        alert("No hay reservas para el año seleccionado.");
+        return;
+    }
+
+    // Sort chrono logic just like in dashboard
+    filteredReservas.sort((a, b) => {
+        const dateA = new Date(a.fecha);
+        const dateB = new Date(b.fecha);
+        if (dateB.getTime() !== dateA.getTime()){
+            return dateA - dateB; // chronological past to future for reports
+        }
+        return a.bloque.localeCompare(b.bloque);
+    });
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(18);
+        doc.text(`Reporte de Reservas de Informática - ${selectedYear}`, 14, 22);
+        
+        doc.setFontSize(11);
+        doc.setTextColor(100);
+        
+        // Formatear Data para AutoTable
+        const tableColumn = ["Fecha", "Bloque", "Profesor", "Curso", "Asignatura", "Estado"];
+        const tableRows = [];
+
+        filteredReservas.forEach(r => {
+            const [y, m, d] = r.fecha.split('-');
+            const niceDate = `${d}/${m}/${y}`;
+            const rowData = [
+                niceDate,
+                r.bloque,
+                r.profesor,
+                r.curso,
+                r.asignatura,
+                r.estado
+            ];
+            tableRows.push(rowData);
+        });
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 30,
+            styles: { fontSize: 9 },
+            headStyles: { fillColor: [10, 102, 194] }
+        });
+
+        doc.save(`Reservas_Informatica_Metrenco_${selectedYear}.pdf`);
+    } catch(err) {
+        console.error("Error generating PDF:", err);
+        alert("Asegurese de estar conectado a internet. Ha ocurrido un error al generar de PDF.");
+    }
+}
+
 function escapeHtml(unsafe) {
     if(!unsafe) return "";
     return unsafe
@@ -410,86 +504,6 @@ function escapeHtml(unsafe) {
          .replace(/>/g, "&gt;")
          .replace(/"/g, "&quot;")
          .replace(/'/g, "&#039;");
-}
-
-function handleDownloadPDF() {
-    const start = pdfStartDate.value;
-    const end = pdfEndDate.value;
-    
-    // Validación de obligatoriedad: Ambos o al menos un rango debe estar presente
-    if (!start && !end) {
-        alert("Por favor, seleccione un rango de fechas (Inicio y/o Fin) antes de descargar el PDF.");
-        return;
-    }
-    
-    let filteredReservas = reservas;
-    
-    // Filtrar por fechas
-    if (start || end) {
-        filteredReservas = reservas.filter(r => {
-            let passStart = true;
-            let passEnd = true;
-            if(start) passStart = r.fecha >= start;
-            if(end) passEnd = r.fecha <= end;
-            return passStart && passEnd;
-        });
-    }
-    
-    if (filteredReservas.length === 0) {
-        alert("No hay reservas registradas en el rango de fechas seleccionado.");
-        return;
-    }
-
-    // Ordenamiento igual al del dashboard
-    const sortedReservas = [...filteredReservas].sort((a, b) => {
-        const dateA = new Date(a.fecha);
-        const dateB = new Date(b.fecha);
-        if (dateB.getTime() !== dateA.getTime()){
-            return dateB - dateA; 
-        }
-        return a.bloque.localeCompare(b.bloque);
-    });
-
-    // jsPDF instanciación
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF('p', 'mm', 'a4');
-    
-    doc.setFontSize(14);
-    
-    // Título condicional según rango
-    let timeRangeSubtitle = "[Historial Completo]";
-    if (start && end) timeRangeSubtitle = `[Desde ${start} hasta ${end}]`;
-    else if (start) timeRangeSubtitle = `[Desde ${start}]`;
-    else if (end) timeRangeSubtitle = `[Hasta ${end}]`;
-
-    doc.text(`Reporte de Uso de Sala - Escuela Metrenco`, 14, 15);
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(timeRangeSubtitle, 14, 21);
-    
-    const tableData = sortedReservas.map(res => {
-        const [y, m, d] = res.fecha.split('-');
-        return [
-            `${d}/${m}/${y}`,
-            res.bloque,
-            res.profesor,
-            res.curso,
-            res.asignatura,
-            res.estado
-        ];
-    });
-
-    doc.autoTable({
-        startY: 26,
-        head: [['Fecha', 'Bloque', 'Profesor(a)', 'Curso', 'Asignatura', 'Estado']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [16, 124, 65] }, // Verde estilo Metrenco / Excel
-        styles: { fontSize: 8 }
-    });
-
-    const timestampName = new Date().toISOString().slice(0, 10);
-    doc.save(`Reservas_Informática_Metrenco_${timestampName}.pdf`);
 }
 
 init();
