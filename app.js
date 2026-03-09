@@ -64,8 +64,7 @@ const loginError = document.getElementById('loginError');
 const btnLogout = document.getElementById('btnLogout');
 
 // Export Admin
-const filterInicio = document.getElementById('filterInicio');
-const filterFin = document.getElementById('filterFin');
+const filterYear = document.getElementById('filterYear');
 const btnExportPDF = document.getElementById('btnExportPDF');
 const btnExportExcel = document.getElementById('btnExportExcel');
 const btnExportWord = document.getElementById('btnExportWord');
@@ -360,14 +359,10 @@ function getStatusClass(statusStr) {
 function getFilteredReservas() {
     let filtradas = [...reservas];
     
-    const fInicio = filterInicio.value;
-    const fFin = filterFin.value;
-
-    if (fInicio) {
-        filtradas = filtradas.filter(r => r.fecha >= fInicio);
-    }
-    if (fFin) {
-        filtradas = filtradas.filter(r => r.fecha <= fFin);
+    const year = filterYear.value;
+    if (year !== "Todos") {
+        // En "filtradas", r.fecha tiene formato "YYYY-MM-DD", verificamos si empieza con "YYYY"
+        filtradas = filtradas.filter(r => r.fecha.startsWith(year));
     }
 
     return filtradas.sort((a, b) => {
@@ -488,9 +483,9 @@ function exportarPDF() {
     
     doc.text("Reporte de Reservas - Escuela Metrenco", 14, 15);
     
-    let subTitle = "Todas las fechas";
-    if(filterInicio.value || filterFin.value) {
-        subTitle = `Desde: ${filterInicio.value || 'Siempre'} - Hasta: ${filterFin.value || 'Siempre'}`;
+    let subTitle = "Lista Completa - Todos los años";
+    if(filterYear.value !== "Todos") {
+        subTitle = `Año filtrado: ${filterYear.value}`;
     }
     doc.setFontSize(10);
     doc.text(subTitle, 14, 22);
