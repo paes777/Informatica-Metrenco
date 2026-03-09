@@ -416,9 +416,15 @@ function handleDownloadPDF() {
     const start = pdfStartDate.value;
     const end = pdfEndDate.value;
     
+    // Validación de obligatoriedad: Ambos o al menos un rango debe estar presente
+    if (!start && !end) {
+        alert("Por favor, seleccione un rango de fechas (Inicio y/o Fin) antes de descargar el PDF.");
+        return;
+    }
+    
     let filteredReservas = reservas;
     
-    // Filtrar si hay fechas
+    // Filtrar por fechas
     if (start || end) {
         filteredReservas = reservas.filter(r => {
             let passStart = true;

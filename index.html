@@ -117,14 +117,17 @@
             <div class="card dashboard-card">
                 <div class="dashboard-header">
                     <h3>Gestión de Solicitudes</h3>
-                    <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; flex-wrap: wrap;">
-                        <input type="date" id="pdfStartDate" class="btn-outline" style="padding: 0.5rem; border-radius: 4px;" title="Fecha Inicio">
+                    <button id="btnLogout" class="btn-outline-danger">Cerrar Sesión</button>
+                </div>
+                
+                <div class="dashboard-filters" style="display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; background-color: #f7fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+                    <div style="display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+                        <span style="font-weight: 600; color: #4a5568;">Rango Exportación:</span>
+                        <input type="date" id="pdfStartDate" class="btn-outline" style="padding: 0.5rem; border-radius: 4px; border-color: var(--border-color); color: var(--text-main); background: #fff;" title="Fecha Inicio">
                         <span style="font-weight: 500;">hasta</span>
-                        <input type="date" id="pdfEndDate" class="btn-outline" style="padding: 0.5rem; border-radius: 4px;" title="Fecha Fin">
-                        
-                        <button id="btnDownloadPDF" class="btn-primary" style="background-color: #107c41; border-color: #107c41;">⬇ Descargar PDF</button>
-                        <button id="btnLogout" class="btn-outline-danger">Cerrar Sesión</button>
+                        <input type="date" id="pdfEndDate" class="btn-outline" style="padding: 0.5rem; border-radius: 4px; border-color: var(--border-color); color: var(--text-main); background: #fff;" title="Fecha Fin">
                     </div>
+                    <button id="btnDownloadPDF" class="btn-primary" style="background-color: #107c41; border-color: #107c41; margin-top: 0; width: auto; padding: 0.6rem 1.2rem;">⬇ Generar y Descargar PDF</button>
                 </div>
                 
                 <div class="table-responsive">
@@ -162,6 +165,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="app.js?v=2.3"></script>
+    <script type="module" src="app.js?v=2.4"></script>
 </body>
 </html>
