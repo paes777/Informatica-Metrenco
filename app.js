@@ -138,6 +138,7 @@ function handleDocenteLoggedIn() {
     
     // Auth UI state
     fieldProfesor.value = currentDocente.nombre;
+    fieldProfesor.defaultValue = currentDocente.nombre; // Para que el reset() automático no lo borre permanentemente
     fieldFecha.disabled = false;
     btnSubmitReserva.disabled = false;
     
