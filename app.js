@@ -138,8 +138,6 @@ function handleDocenteLoggedIn() {
     
     // Auth UI state
     fieldProfesor.value = currentDocente.nombre;
-    fieldProfesor.placeholder = currentDocente.nombre; // Cambiamos el placeholder directamente
-    fieldProfesor.defaultValue = currentDocente.nombre; 
     fieldFecha.disabled = false;
     btnSubmitReserva.disabled = false;
     
@@ -466,20 +464,14 @@ async function handleReservaSubmit(e) {
         
         showToast("Gracias por solicitar la sala de informática");
         
-        // Limpiar solo campos específicos (no usar reset() nativo)
-        fieldFecha.value = "";
-        document.getElementById('curso').value = "";
-        document.getElementById('asignatura').value = "";
-        document.getElementById('objetivo').value = "";
-        
-        fieldBloque.innerHTML = '<option value="">Seleccione una fecha primero...</option>';
-        fieldBloque.disabled = true;
-        
-        // Mantenemos el nombre intacto sí o sí
+        // Limpiar pero conservar nombre de profesor
+        reservaForm.reset();
         if (currentDocente) {
             fieldProfesor.value = currentDocente.nombre;
         }
-
+        
+        fieldBloque.innerHTML = '<option value="">Seleccione una fecha primero...</option>';
+        fieldBloque.disabled = true;
     } catch(err) {
         console.error("Error al guardar reserva: ", err);
         alert("Ha ocurrido un error de conexión al enviar. Verifique su internet y reintente.");
