@@ -466,16 +466,18 @@ async function handleReservaSubmit(e) {
         
         showToast("Gracias por solicitar la sala de informática");
         
-        // Limpiar
-        reservaForm.reset();
+        // Limpiar solo campos específicos (no usar reset() nativo)
+        fieldFecha.value = "";
+        document.getElementById('curso').value = "";
+        document.getElementById('asignatura').value = "";
+        document.getElementById('objetivo').value = "";
+        
         fieldBloque.innerHTML = '<option value="">Seleccione una fecha primero...</option>';
         fieldBloque.disabled = true;
         
-        // Restaurar nombre del docente
+        // Mantenemos el nombre intacto sí o sí
         if (currentDocente) {
             fieldProfesor.value = currentDocente.nombre;
-            fieldProfesor.placeholder = currentDocente.nombre;
-            fieldProfesor.setAttribute('value', currentDocente.nombre);
         }
 
         // Refrescar página después de 1.5 segundos para forzar actualización de la vista
