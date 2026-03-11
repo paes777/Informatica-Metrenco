@@ -57,16 +57,14 @@ let isAdminLogged = false;
 let currentDocente = null; // { uid, nombre, usuario }
 
 // --- REFERENCIAS AL DOM ---
-const viewDocente = document.getElementById('docenteView');
+const viewDocenteAuth = document.getElementById('docenteAuthView'); // La principal ahora
+const viewDocente = document.getElementById('docenteView'); // Formulario + Dashboard mis reservas
 const viewAdminLogin = document.getElementById('adminLoginView');
 const viewAdminDashboard = document.getElementById('adminDashboardView');
-const viewDocenteAuth = document.getElementById('docenteAuthView');
-const viewDocenteDashboard = document.getElementById('docenteDashboardView');
 
 const navAdminBtn = document.getElementById('navAdminBtn');
 const navDocenteBtn = document.getElementById('navDocenteBtn');
 const navDocenteLoginBtn = document.getElementById('navDocenteLoginBtn');
-const navDocenteDashboardBtn = document.getElementById('navDocenteDashboardBtn');
 const logoutDocenteBtn = document.getElementById('logoutDocenteBtn');
 const docenteNameDisplay = document.getElementById('docenteNameDisplay');
 
@@ -137,7 +135,6 @@ function handleDocenteLoggedIn() {
     docenteNameDisplay.classList.remove('d-none');
     logoutDocenteBtn.classList.remove('d-none');
     navDocenteLoginBtn.classList.add('d-none');
-    navDocenteDashboardBtn.classList.remove('d-none');
     
     // Auth UI state
     fieldProfesor.value = currentDocente.nombre;
@@ -152,24 +149,19 @@ function handleDocenteLoggedOut() {
     docenteNameDisplay.classList.add('d-none');
     logoutDocenteBtn.classList.add('d-none');
     navDocenteLoginBtn.classList.remove('d-none');
-    navDocenteDashboardBtn.classList.add('d-none');
     
     // Auth UI state
     fieldProfesor.value = "";
     fieldFecha.disabled = true;
     btnSubmitReserva.disabled = true;
     
-    if (viewDocenteDashboard.classList.contains('active')) {
-        showDocenteView();
-    }
+    showDocenteAuthView();
 }
 
 function setupEventListeners() {
     // Navegación principal
     navAdminBtn.addEventListener('click', showAdminLogin);
-    navDocenteBtn.addEventListener('click', showDocenteView);
     navDocenteLoginBtn.addEventListener('click', showDocenteAuthView);
-    navDocenteDashboardBtn.addEventListener('click', showDocenteDashboardView);
     btnLogout.addEventListener('click', handleLogout);
     logoutDocenteBtn.addEventListener('click', () => signOut(auth));
 
@@ -205,7 +197,7 @@ function listenToFirestore() {
         });
         
         if (isAdminLogged) renderDashboard();
-        if (currentDocente && viewDocenteDashboard.classList.contains('active')) renderDocenteDashboard();
+        if (currentDocente && viewDocente.classList.contains('active')) renderDocenteDashboard();
         if (fieldFecha.value) handleFechaChange();
     });
 }
@@ -223,19 +215,20 @@ function hideAllViews() {
     viewAdminLogin.classList.remove('active'); viewAdminLogin.classList.add('d-none');
     viewAdminDashboard.classList.remove('active'); viewAdminDashboard.classList.add('d-none');
     viewDocenteAuth.classList.remove('active'); viewDocenteAuth.classList.add('d-none');
-    viewDocenteDashboard.classList.remove('active'); viewDocenteDashboard.classList.add('d-none');
 }
 
 function showDocenteView() {
+    if(!currentDocente) return showDocenteAuthView();
+    
     hideAllViews();
     viewDocente.classList.add('active');
     viewDocente.classList.remove('d-none');
     
     navAdminBtn.classList.remove('d-none');
-    if(!currentDocente) navDocenteLoginBtn.classList.remove('d-none');
-    navDocenteBtn.classList.add('d-none');
+    navDocenteLoginBtn.classList.add('d-none');
     
     if (fieldFecha.value) handleFechaChange();
+    renderDocenteDashboard();
 }
 
 function showAdminLogin() {
@@ -249,7 +242,6 @@ function showAdminLogin() {
     
     navAdminBtn.classList.add('d-none');
     navDocenteLoginBtn.classList.add('d-none');
-    navDocenteBtn.classList.remove('d-none');
     loginError.classList.add('d-none');
 }
 
@@ -259,8 +251,7 @@ function showAdminDashboard() {
     viewAdminDashboard.classList.remove('d-none');
     
     navAdminBtn.classList.add('d-none');
-    navDocenteLoginBtn.classList.add('d-none');
-    navDocenteBtn.classList.remove('d-none');
+    navDocenteLoginBtn.classList.remove('d-none');
     
     renderDashboard();
 }
@@ -271,21 +262,8 @@ function showDocenteAuthView() {
     viewDocenteAuth.classList.add('active');
     viewDocenteAuth.classList.remove('d-none');
     
-    navAdminBtn.classList.add('d-none');
-    navDocenteLoginBtn.classList.add('d-none');
-    navDocenteBtn.classList.remove('d-none');
-}
-
-function showDocenteDashboardView() {
-    if(!currentDocente) return showDocenteView();
-    hideAllViews();
-    viewDocenteDashboard.classList.add('active');
-    viewDocenteDashboard.classList.remove('d-none');
-    
     navAdminBtn.classList.remove('d-none');
-    navDocenteBtn.classList.remove('d-none');
-    
-    renderDocenteDashboard();
+    navDocenteLoginBtn.classList.add('d-none');
 }
 
 // --- LOGICA AUTH DOCENTE ---
@@ -516,7 +494,7 @@ function handleLogin(e) {
 
 function handleLogout() {
     isAdminLogged = false;
-    showDocenteView();
+    showDocenteAuthView();
 }
 
 function getStatusClass(statusStr) {
@@ -621,12 +599,12 @@ function renderDocenteDashboard() {
     
     if (misReservas.length === 0) {
         noMisReservasMsg.classList.remove('d-none');
-        document.querySelector('#docenteDashboardView .table-responsive').classList.add('d-none');
+        document.querySelector('#docenteView .table-responsive').classList.add('d-none');
         return;
     }
 
     noMisReservasMsg.classList.add('d-none');
-    document.querySelector('#docenteDashboardView .table-responsive').classList.remove('d-none');
+    document.querySelector('#docenteView .table-responsive').classList.remove('d-none');
 
     const sortedReservas = [...misReservas].sort((a, b) => {
         const dateA = new Date(a.fecha);
@@ -705,7 +683,7 @@ function renderDocenteDashboard() {
     });
 
     // Delegar borrado (Cancelar Mi Reserva)
-    document.querySelectorAll('#docenteDashboardView .btn-danger-icon').forEach(btn => {
+    document.querySelectorAll('#docenteView .btn-danger-icon').forEach(btn => {
         btn.addEventListener('click', async function() {
             if (confirm("¿Seguro que deseas cancelar esta reserva? Liberarás el horario para otros colegas.")) {
                 try {
