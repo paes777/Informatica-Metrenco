@@ -474,6 +474,12 @@ async function handleReservaSubmit(e) {
         if (currentDocente) {
             fieldProfesor.value = currentDocente.nombre;
         }
+
+        // Refrescar página después de 1.5 segundos para forzar actualización de la vista
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+
     } catch(err) {
         console.error("Error al guardar reserva: ", err);
         alert("Ha ocurrido un error de conexión al enviar. Verifique su internet y reintente.");
