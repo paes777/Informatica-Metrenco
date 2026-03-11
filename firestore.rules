@@ -14,5 +14,8 @@ service cloud.firestore {
       // update your rules.
       allow read, write: if request.time < timestamp.date(2026, 4, 8);
     }
+    match /docentes/{docenteId} {
+      allow read, write: if request.time < timestamp.date(2026, 4, 8);
+    }
   }
 }
