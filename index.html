@@ -17,8 +17,14 @@
                 <h2>Reserva Sala de Informática</h2>
             </div>
         </div>
-        <button id="navAdminBtn" class="btn-outline">Acceso Administrador</button>
-        <button id="navDocenteBtn" class="btn-outline d-none">Volver al Formulario</button>
+        <div class="header-actions">
+            <span id="docenteNameDisplay" class="docente-name-display d-none"></span>
+            <button id="navAdminBtn" class="btn-outline">Acceso Administrador</button>
+            <button id="navDocenteBtn" class="btn-outline d-none">Volver al Formulario</button>
+            <button id="navDocenteLoginBtn" class="btn-outline">Acceso Docentes</button>
+            <button id="navDocenteDashboardBtn" class="btn-outline d-none">Mis Reservas</button>
+            <button id="logoutDocenteBtn" class="btn-outline-danger d-none" style="margin-left: 10px; padding: 0.6rem 1.2rem; font-size: 0.9rem;">Cerrar Sesión</button>
+        </div>
     </header>
 
     <main class="container">
@@ -30,14 +36,14 @@
                 <form id="reservaForm">
                     <div class="form-group">
                         <label for="profesor">Nombre del Profesor(a)</label>
-                        <input type="text" id="profesor" required placeholder="Ej. Juan Pérez">
+                        <input type="text" id="profesor" required placeholder="Debe iniciar sesión primero" disabled>
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group">
                             <label for="fecha">Fecha de Reserva</label>
-                            <input type="date" id="fecha" required>
-                            <small class="help-text">Solo de lunes a viernes.</small>
+                            <input type="date" id="fecha" required disabled>
+                            <small class="help-text">Solo el mes en curso. Inicie sesión para reservar.</small>
                         </div>
                         <div class="form-group">
                             <label for="bloque">Bloque Horario</label>
@@ -87,8 +93,90 @@
                         <textarea id="objetivo" rows="3" required placeholder="Describa la actividad que trabajará con los estudiantes..."></textarea>
                     </div>
 
-                    <button type="submit" class="btn-primary" id="btnSubmitReserva">Enviar Solicitud</button>
+                    <button type="submit" class="btn-primary" id="btnSubmitReserva" disabled>Enviar Solicitud</button>
                 </form>
+            </div>
+        </section>
+
+        <!-- VISTA DOCENTE AUTH (LOGIN / REGISTRO) -->
+        <section id="docenteAuthView" class="view-section d-none">
+            <div class="card login-card">
+                <div class="tabs-header" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 2rem;">
+                    <button id="tabLoginDocente" class="tab-btn active" style="flex: 1; background: none; border: none; padding: 1rem; font-weight: 600; color: var(--primary-color); border-bottom: 3px solid var(--primary-color);">Iniciar Sesión</button>
+                    <button id="tabRegisterDocente" class="tab-btn" style="flex: 1; background: none; border: none; padding: 1rem; font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent;">Registrarse</button>
+                </div>
+                
+                <!-- Login Docente -->
+                <div id="formLoginDocenteWrap">
+                    <form id="docenteLoginForm">
+                        <div class="form-group">
+                            <label for="docenteUserLogin">Usuario</label>
+                            <input type="text" id="docenteUserLogin" required placeholder="Ej. jperez">
+                        </div>
+                        <div class="form-group">
+                            <label for="docentePassLogin">Contraseña</label>
+                            <input type="password" id="docentePassLogin" required>
+                        </div>
+                        <div id="docenteLoginError" class="error-msg d-none">Credenciales incorrectas</div>
+                        <button type="submit" class="btn-primary">Ingresar</button>
+                    </form>
+                </div>
+
+                <!-- Registro Docente -->
+                <div id="formRegisterDocenteWrap" class="d-none">
+                    <form id="docenteRegisterForm">
+                        <div class="form-group">
+                            <label for="docenteNameReg">Nombre Completo</label>
+                            <input type="text" id="docenteNameReg" required placeholder="Ej. Juan Pérez">
+                        </div>
+                        <div class="form-group">
+                            <label for="docenteUserReg">Usuario</label>
+                            <input type="text" id="docenteUserReg" required placeholder="Ej. jperez">
+                            <small class="help-text">El usuario corto para iniciar sesión.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="docentePassReg">Contraseña</label>
+                            <input type="password" id="docentePassReg" required maxlength="8" pattern="[A-Za-z0-9]+" title="Máximo 8 caracteres alfanuméricos">
+                            <small class="help-text">Máximo 8 caracteres (solo letras y números, sin espacios).</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="docentePassRegConfirm">Confirmar Contraseña</label>
+                            <input type="password" id="docentePassRegConfirm" required maxlength="8">
+                        </div>
+                        <div id="docenteRegError" class="error-msg d-none">Error al registrar.</div>
+                        <button type="submit" class="btn-primary" style="background-color: var(--secondary-color);">Crear Cuenta</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- VISTA DOCENTE DASHBOARD -->
+        <section id="docenteDashboardView" class="view-section d-none">
+            <div class="card dashboard-card">
+                <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                    <h3 style="margin: 0;">Mis Reservas</h3>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="reservas-table">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Bloque</th>
+                                <th>Curso</th>
+                                <th>Asignatura</th>
+                                <th>Asistencia</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="misReservasTbody">
+                            <!-- Filas generadas dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="noMisReservasMsg" class="empty-state d-none">
+                    No has realizado solicitudes aún.
+                </div>
             </div>
         </section>
 

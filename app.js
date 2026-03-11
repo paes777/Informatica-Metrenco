@@ -1,11 +1,20 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { 
     getFirestore, 
     collection, 
     getDocs, 
     addDoc, 
     deleteDoc, 
-    doc, 
+    doc,
+    getDoc,
+    setDoc,
     updateDoc,
     onSnapshot,
     serverTimestamp,
@@ -24,8 +33,10 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 const reservasRef = collection(db, "reservas");
+const docentesRef = collection(db, "docentes");
 
 // --- CONSTANTES ---
 const BLOCKS_MON_THU = [
@@ -43,20 +54,43 @@ const BLOCKS_FRI = [
 // --- ESTADO INICIAL ---
 let reservas = []; // Se poblará desde Firebase Firestore
 let isAdminLogged = false;
+let currentDocente = null; // { uid, nombre, usuario }
 
 // --- REFERENCIAS AL DOM ---
 const viewDocente = document.getElementById('docenteView');
 const viewAdminLogin = document.getElementById('adminLoginView');
 const viewAdminDashboard = document.getElementById('adminDashboardView');
+const viewDocenteAuth = document.getElementById('docenteAuthView');
+const viewDocenteDashboard = document.getElementById('docenteDashboardView');
 
 const navAdminBtn = document.getElementById('navAdminBtn');
 const navDocenteBtn = document.getElementById('navDocenteBtn');
+const navDocenteLoginBtn = document.getElementById('navDocenteLoginBtn');
+const navDocenteDashboardBtn = document.getElementById('navDocenteDashboardBtn');
+const logoutDocenteBtn = document.getElementById('logoutDocenteBtn');
+const docenteNameDisplay = document.getElementById('docenteNameDisplay');
 
-// Formularios Docente
+// Formularios Reserva
 const reservaForm = document.getElementById('reservaForm');
+const fieldProfesor = document.getElementById('profesor');
 const fieldFecha = document.getElementById('fecha');
 const fieldBloque = document.getElementById('bloque');
-const btnSubmitReserva = document.getElementById('btnSubmitReserva'); // Button to toggle state
+const btnSubmitReserva = document.getElementById('btnSubmitReserva');
+
+// Auth Docente
+const tabLoginDocente = document.getElementById('tabLoginDocente');
+const tabRegisterDocente = document.getElementById('tabRegisterDocente');
+const formLoginDocenteWrap = document.getElementById('formLoginDocenteWrap');
+const formRegisterDocenteWrap = document.getElementById('formRegisterDocenteWrap');
+
+const docenteLoginForm = document.getElementById('docenteLoginForm');
+const docenteLoginError = document.getElementById('docenteLoginError');
+const docenteRegisterForm = document.getElementById('docenteRegisterForm');
+const docenteRegError = document.getElementById('docenteRegError');
+
+// Dashboard Docente
+const misReservasTbody = document.getElementById('misReservasTbody');
+const noMisReservasMsg = document.getElementById('noMisReservasMsg');
 
 // Auth Admin
 const loginForm = document.getElementById('loginForm');
@@ -74,18 +108,80 @@ const exportFechaFin = document.getElementById('exportFechaFin');
 function init() {
     setupEventListeners();
     setMinDate();
-    listenToFirestore(); // Habilitar escucha en tiempo real
+    listenToAuth();
+    listenToFirestore();
+}
+
+function listenToAuth() {
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // Obtener info del docente desde Firestore
+            const docRef = doc(db, "docentes", user.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                currentDocente = { uid: user.uid, ...docSnap.data() };
+                handleDocenteLoggedIn();
+            } else {
+                // Posible error o es otro tipo de usuario
+                auth.signOut();
+            }
+        } else {
+            currentDocente = null;
+            handleDocenteLoggedOut();
+        }
+    });
+}
+
+function handleDocenteLoggedIn() {
+    docenteNameDisplay.textContent = `Hola, ${currentDocente.nombre}`;
+    docenteNameDisplay.classList.remove('d-none');
+    logoutDocenteBtn.classList.remove('d-none');
+    navDocenteLoginBtn.classList.add('d-none');
+    navDocenteDashboardBtn.classList.remove('d-none');
+    
+    // Auth UI state
+    fieldProfesor.value = currentDocente.nombre;
+    fieldFecha.disabled = false;
+    btnSubmitReserva.disabled = false;
+    
+    showDocenteView();
+    if(isAdminLogged) handleLogout();
+}
+
+function handleDocenteLoggedOut() {
+    docenteNameDisplay.classList.add('d-none');
+    logoutDocenteBtn.classList.add('d-none');
+    navDocenteLoginBtn.classList.remove('d-none');
+    navDocenteDashboardBtn.classList.add('d-none');
+    
+    // Auth UI state
+    fieldProfesor.value = "";
+    fieldFecha.disabled = true;
+    btnSubmitReserva.disabled = true;
+    
+    if (viewDocenteDashboard.classList.contains('active')) {
+        showDocenteView();
+    }
 }
 
 function setupEventListeners() {
-    // Navegación
+    // Navegación principal
     navAdminBtn.addEventListener('click', showAdminLogin);
     navDocenteBtn.addEventListener('click', showDocenteView);
+    navDocenteLoginBtn.addEventListener('click', showDocenteAuthView);
+    navDocenteDashboardBtn.addEventListener('click', showDocenteDashboardView);
     btnLogout.addEventListener('click', handleLogout);
+    logoutDocenteBtn.addEventListener('click', () => signOut(auth));
 
     // Eventos Formulario Docente
     fieldFecha.addEventListener('change', handleFechaChange);
     reservaForm.addEventListener('submit', handleReservaSubmit);
+
+    // Eventos Auth Docente
+    tabLoginDocente.addEventListener('click', () => switchDocenteAuthTab('login'));
+    tabRegisterDocente.addEventListener('click', () => switchDocenteAuthTab('register'));
+    docenteLoginForm.addEventListener('submit', handleDocenteLogin);
+    docenteRegisterForm.addEventListener('submit', handleDocenteRegister);
 
     // Eventos Admin Login
     loginForm.addEventListener('submit', handleLogin);
@@ -98,7 +194,6 @@ function setupEventListeners() {
 
 // --- LOGICA CORE FIREBASE LECTURAS EN TIEMPO REAL ---
 function listenToFirestore() {
-    // Escucha todos los cambios y sincroniza el array `reservas` global
     const q = query(reservasRef, orderBy("createdAt", "desc"));
     onSnapshot(q, (snapshot) => {
         reservas = [];
@@ -109,15 +204,9 @@ function listenToFirestore() {
             });
         });
         
-        // Si estamos en la vista de Admin, refrezcamos la tabla con los nuevos datos
-        if (isAdminLogged) {
-            renderDashboard();
-        }
-        
-        // Si hay una fecha seleccionada en el formulario del docente, actualizamos su disponibilidad
-        if (fieldFecha.value) {
-            handleFechaChange();
-        }
+        if (isAdminLogged) renderDashboard();
+        if (currentDocente && viewDocenteDashboard.classList.contains('active')) renderDocenteDashboard();
+        if (fieldFecha.value) handleFechaChange();
     });
 }
 
@@ -129,20 +218,24 @@ function showToast(msg) {
 }
 
 // --- CONTROLADOR DE VISTAS ---
+function hideAllViews() {
+    viewDocente.classList.remove('active'); viewDocente.classList.add('d-none');
+    viewAdminLogin.classList.remove('active'); viewAdminLogin.classList.add('d-none');
+    viewAdminDashboard.classList.remove('active'); viewAdminDashboard.classList.add('d-none');
+    viewDocenteAuth.classList.remove('active'); viewDocenteAuth.classList.add('d-none');
+    viewDocenteDashboard.classList.remove('active'); viewDocenteDashboard.classList.add('d-none');
+}
+
 function showDocenteView() {
+    hideAllViews();
     viewDocente.classList.add('active');
     viewDocente.classList.remove('d-none');
-    viewAdminLogin.classList.remove('active');
-    viewAdminLogin.classList.add('d-none');
-    viewAdminDashboard.classList.remove('active');
-    viewAdminDashboard.classList.add('d-none');
     
     navAdminBtn.classList.remove('d-none');
+    if(!currentDocente) navDocenteLoginBtn.classList.remove('d-none');
     navDocenteBtn.classList.add('d-none');
     
-    if (fieldFecha.value) {
-        handleFechaChange();
-    }
+    if (fieldFecha.value) handleFechaChange();
 }
 
 function showAdminLogin() {
@@ -150,30 +243,130 @@ function showAdminLogin() {
         showAdminDashboard();
         return;
     }
-    viewDocente.classList.remove('active');
-    viewDocente.classList.add('d-none');
+    hideAllViews();
     viewAdminLogin.classList.add('active');
     viewAdminLogin.classList.remove('d-none');
-    viewAdminDashboard.classList.remove('active');
-    viewAdminDashboard.classList.add('d-none');
     
     navAdminBtn.classList.add('d-none');
+    navDocenteLoginBtn.classList.add('d-none');
     navDocenteBtn.classList.remove('d-none');
     loginError.classList.add('d-none');
 }
 
 function showAdminDashboard() {
-    viewDocente.classList.remove('active');
-    viewDocente.classList.add('d-none');
-    viewAdminLogin.classList.remove('active');
-    viewAdminLogin.classList.add('d-none');
+    hideAllViews();
     viewAdminDashboard.classList.add('active');
     viewAdminDashboard.classList.remove('d-none');
     
     navAdminBtn.classList.add('d-none');
+    navDocenteLoginBtn.classList.add('d-none');
     navDocenteBtn.classList.remove('d-none');
     
     renderDashboard();
+}
+
+function showDocenteAuthView() {
+    if(currentDocente) return showDocenteView();
+    hideAllViews();
+    viewDocenteAuth.classList.add('active');
+    viewDocenteAuth.classList.remove('d-none');
+    
+    navAdminBtn.classList.add('d-none');
+    navDocenteLoginBtn.classList.add('d-none');
+    navDocenteBtn.classList.remove('d-none');
+}
+
+function showDocenteDashboardView() {
+    if(!currentDocente) return showDocenteView();
+    hideAllViews();
+    viewDocenteDashboard.classList.add('active');
+    viewDocenteDashboard.classList.remove('d-none');
+    
+    navAdminBtn.classList.remove('d-none');
+    navDocenteBtn.classList.remove('d-none');
+    
+    renderDocenteDashboard();
+}
+
+// --- LOGICA AUTH DOCENTE ---
+function switchDocenteAuthTab(tab) {
+    if (tab === 'login') {
+        tabLoginDocente.classList.add('active');
+        tabLoginDocente.style.color = 'var(--primary-color)';
+        tabLoginDocente.style.borderBottomColor = 'var(--primary-color)';
+        tabRegisterDocente.classList.remove('active');
+        tabRegisterDocente.style.color = 'var(--text-muted)';
+        tabRegisterDocente.style.borderBottomColor = 'transparent';
+        
+        formLoginDocenteWrap.classList.remove('d-none');
+        formRegisterDocenteWrap.classList.add('d-none');
+    } else {
+        tabRegisterDocente.classList.add('active');
+        tabRegisterDocente.style.color = 'var(--primary-color)';
+        tabRegisterDocente.style.borderBottomColor = 'var(--primary-color)';
+        tabLoginDocente.classList.remove('active');
+        tabLoginDocente.style.color = 'var(--text-muted)';
+        tabLoginDocente.style.borderBottomColor = 'transparent';
+        
+        formRegisterDocenteWrap.classList.remove('d-none');
+        formLoginDocenteWrap.classList.add('d-none');
+    }
+}
+
+async function handleDocenteLogin(e) {
+    e.preventDefault();
+    const user = document.getElementById('docenteUserLogin').value.trim();
+    const pass = document.getElementById('docentePassLogin').value;
+    const dummyEmail = `${user}@docente.metrenco.cl`;
+    
+    try {
+        await signInWithEmailAndPassword(auth, dummyEmail, pass);
+        docenteLoginForm.reset();
+        docenteLoginError.classList.add('d-none');
+    } catch(err) {
+        docenteLoginError.textContent = "Credenciales incorrectas o usuario no existe.";
+        docenteLoginError.classList.remove('d-none');
+        console.error(err);
+    }
+}
+
+async function handleDocenteRegister(e) {
+    e.preventDefault();
+    const nombre = document.getElementById('docenteNameReg').value.trim();
+    const user = document.getElementById('docenteUserReg').value.trim();
+    const pass = document.getElementById('docentePassReg').value;
+    const pass2 = document.getElementById('docentePassRegConfirm').value;
+    
+    if (pass !== pass2) {
+        docenteRegError.textContent = "Las contraseñas no coinciden.";
+        docenteRegError.classList.remove('d-none');
+        return;
+    }
+    
+    const dummyEmail = `${user}@docente.metrenco.cl`;
+    
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, dummyEmail, pass);
+        // Crear documento del docente en Firestore
+        await setDoc(doc(db, "docentes", userCredential.user.uid), {
+            nombre: nombre,
+            usuario: user
+        });
+        
+        docenteRegisterForm.reset();
+        docenteRegError.classList.add('d-none');
+        showToast("Cuenta creada exitosamente");
+    } catch(err) {
+        if(err.code === 'auth/email-already-in-use') {
+            docenteRegError.textContent = "El nombre de usuario ya está registrado.";
+        } else if(err.code === 'auth/weak-password') {
+            docenteRegError.textContent = "La contraseña debe tener al menos 6 caracteres.";
+        } else {
+            docenteRegError.textContent = "Error al registrar: " + err.message;
+        }
+        docenteRegError.classList.remove('d-none');
+        console.error(err);
+    }
 }
 
 // --- LOGICA FORMULARIO DOCENTE ---
@@ -255,6 +448,17 @@ async function handleReservaSubmit(e) {
     const asignatura = document.getElementById('asignatura').value;
     const objetivo = document.getElementById('objetivo').value.trim();
 
+    // Verificación sincrónica de límites del mes
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const selectedDate = new Date(`${fecha}T00:00:00`);
+    if (selectedDate.getMonth() !== currentMonth || selectedDate.getFullYear() !== currentYear) {
+        alert("Las reservas solo están permitidas para el mes en curso.");
+        fieldFecha.value = "";
+        handleFechaChange();
+        return;
+    }
+
     // Verificación sincrónica antes de envío
     const blocksData = getAvailableBlocks(fecha);
     if (blocksData.reserved[bloque]) {
@@ -269,7 +473,8 @@ async function handleReservaSubmit(e) {
 
     try {
         await addDoc(reservasRef, {
-            profesor,
+            profesor, // Traído del perfil guardado
+            uidDocente: currentDocente.uid, // Referencia al usuario de Firebase Auth
             fecha,
             bloque,
             curso,
@@ -400,6 +605,115 @@ function renderDashboard() {
                     await deleteDoc(doc(db, "reservas", this.dataset.id));
                 } catch(e) {
                     console.error("Error borrando Doc:", e);
+                }
+            }
+        });
+    });
+}
+
+function renderDocenteDashboard() {
+    misReservasTbody.innerHTML = '';
+    
+    if(!currentDocente) return;
+    
+    // Filtrar mis reservas
+    const misReservas = reservas.filter(r => r.uidDocente === currentDocente.uid || r.profesor === currentDocente.nombre);
+    
+    if (misReservas.length === 0) {
+        noMisReservasMsg.classList.remove('d-none');
+        document.querySelector('#docenteDashboardView .table-responsive').classList.add('d-none');
+        return;
+    }
+
+    noMisReservasMsg.classList.add('d-none');
+    document.querySelector('#docenteDashboardView .table-responsive').classList.remove('d-none');
+
+    const sortedReservas = [...misReservas].sort((a, b) => {
+        const dateA = new Date(a.fecha);
+        const dateB = new Date(b.fecha);
+        // Recientes primero
+        if (dateB.getTime() !== dateA.getTime()){
+            return dateB - dateA; 
+        }
+        return a.bloque.localeCompare(b.bloque);
+    });
+
+    const now = new Date();
+
+    sortedReservas.forEach(res => {
+        const tr = document.createElement('tr');
+        
+        const [year, month, day] = res.fecha.split('-');
+        const niceDate = `${day}/${month}/${year}`;
+        const sClass = getStatusClass(res.estado);
+        
+        // Logica para deshabilitar botón asistencia
+        // Bloque string formato "08:30 a 10:00" - Parseamos inicio (08:30)
+        let disableAsistencia = true;
+        const matchTime = res.bloque.match(/^(\d{2}):(\d{2})/);
+        if(matchTime) {
+            const h = parseInt(matchTime[1], 10);
+            const m = parseInt(matchTime[2], 10);
+            const reserveDate = new Date(`${res.fecha}T00:00:00`);
+            reserveDate.setHours(h, m, 0, 0);
+            
+            // Habilitar solo si ya pasó la fecha/hora de inicio del bloque
+            if (now >= reserveDate) {
+                disableAsistencia = false;
+            }
+        }
+
+        tr.innerHTML = `
+            <td>${niceDate}</td>
+            <td>${res.bloque}</td>
+            <td>${res.curso}</td>
+            <td>${res.asignatura}</td>
+            <td>
+                <select class="status-select ${sClass} docente-status" data-id="${res.id}" ${disableAsistencia ? 'disabled title="Disponible solo después de iniciada la clase"' : ''}>
+                    <option value="Pendiente" ${res.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                    <option value="Asistió" ${res.estado === 'Asistió' ? 'selected' : ''}>Sí, Asistí</option>
+                    <option value="No asistió" ${res.estado === 'No asistió' ? 'selected' : ''}>No pude asistir</option>
+                </select>
+            </td>
+            <td>
+                <button class="btn-danger-icon" data-id="${res.id}" title="Eliminar/Cancelar Mi Reserva" style="padding: 0.4rem 0.8rem; border-radius: 4px; border:none; cursor:pointer; background-color: #e53e3e; color: white;">
+                    🗑️ Cancelar
+                </button>
+            </td>
+        `;
+
+        misReservasTbody.appendChild(tr);
+    });
+
+    // Delegar estado Firestore (Asistencia Docente)
+    document.querySelectorAll('.docente-status').forEach(sel => {
+        sel.addEventListener('change', async function() {
+            const documentId = this.dataset.id;
+            const newStatus = this.value;
+            this.className = `status-select ${getStatusClass(newStatus)} docente-status`;
+            
+            try {
+                await updateDoc(doc(db, "reservas", documentId), {
+                    estado: newStatus
+                });
+                showToast("Estado actualizado");
+            } catch(e) {
+                console.error("Error cambiando estado:", e);
+                alert("Error al guardar asistencia");
+            }
+        });
+    });
+
+    // Delegar borrado (Cancelar Mi Reserva)
+    document.querySelectorAll('#docenteDashboardView .btn-danger-icon').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            if (confirm("¿Seguro que deseas cancelar esta reserva? Liberarás el horario para otros colegas.")) {
+                try {
+                    await deleteDoc(doc(db, "reservas", this.dataset.id));
+                    showToast("Reserva cancelada exitosamente");
+                } catch(e) {
+                    console.error("Error borrando Doc:", e);
+                    alert("No se pudo cancelar la reserva");
                 }
             }
         });

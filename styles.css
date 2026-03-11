@@ -281,3 +281,7 @@ select.status-select {
     .btn-outline { width: 100%; margin-top: 0.5rem;}
     .card { padding: 1.5rem; }
 }
+
+
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.docente-name-display { font-weight: 500; font-size: 0.95rem; margin-right: 0.5rem; }

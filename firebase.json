@@ -4,5 +4,16 @@
     "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "actualizar.bat",
+      "firestore.rules",
+      "firestore.indexes.json"
+    ]
   }
 }
