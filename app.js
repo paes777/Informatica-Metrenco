@@ -53,6 +53,7 @@ const BLOCKS_FRI = [
 
 // --- ESTADO INICIAL ---
 let reservas = []; // Se poblará desde Firebase Firestore
+let docentesLista = []; // Se poblará desde Firebase Firestore
 let isAdminLogged = false;
 let currentDocente = null; // { uid, nombre, usuario }
 
@@ -101,6 +102,16 @@ const noReservasMsg = document.getElementById('noReservasMsg');
 const btnExportPDF = document.getElementById('btnExportPDF');
 const exportFechaInicio = document.getElementById('exportFechaInicio');
 const exportFechaFin = document.getElementById('exportFechaFin');
+
+// Formulario Asignación Admin
+const adminReservaForm = document.getElementById('adminReservaForm');
+const adminSelectProfesor = document.getElementById('adminSelectProfesor');
+const adminFecha = document.getElementById('adminFecha');
+const adminBloque = document.getElementById('adminBloque');
+const adminCurso = document.getElementById('adminCurso');
+const adminAsignatura = document.getElementById('adminAsignatura');
+const adminObjetivo = document.getElementById('adminObjetivo');
+const btnAdminSubmitReserva = document.getElementById('btnAdminSubmitReserva');
 
 // --- INICIALIZACIÓN ---
 function init() {
@@ -178,6 +189,10 @@ function setupEventListeners() {
     // Eventos Admin Login
     loginForm.addEventListener('submit', handleLogin);
 
+    // Eventos Formulario Admin Asignación
+    if (adminFecha) adminFecha.addEventListener('change', handleAdminFechaChange);
+    if (adminReservaForm) adminReservaForm.addEventListener('submit', handleAdminReservaSubmit);
+
     // Eventos Dashboard
     if (btnExportPDF) {
         btnExportPDF.addEventListener('click', handleExportPDF);
@@ -198,7 +213,28 @@ function listenToFirestore() {
         
         if (isAdminLogged) renderDashboard();
         if (currentDocente && viewDocente.classList.contains('active')) renderDocenteDashboard();
-        if (fieldFecha.value) handleFechaChange();
+        if (fieldFecha && fieldFecha.value) handleFechaChange();
+        if (adminFecha && adminFecha.value) handleAdminFechaChange();
+    });
+
+    // Escuchar colección docentes para el select de admin
+    onSnapshot(docentesRef, (snapshot) => {
+        docentesLista = [];
+        if(adminSelectProfesor) adminSelectProfesor.innerHTML = '<option value="">Seleccione un profesor...</option>';
+        
+        snapshot.forEach((docSnap) => {
+            docentesLista.push({ uid: docSnap.id, ...docSnap.data() });
+        });
+        
+        if(adminSelectProfesor) {
+            docentesLista.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach(docente => {
+                const option = document.createElement('option');
+                option.value = docente.uid;
+                option.textContent = docente.nombre;
+                option.dataset.nombre = docente.nombre;
+                adminSelectProfesor.appendChild(option);
+            });
+        }
     });
 }
 
@@ -365,7 +401,8 @@ function setMinDate() {
     const today = new Date();
     const tzOffset = today.getTimezoneOffset() * 60000;
     const localISOTime = (new Date(today.getTime() - tzOffset)).toISOString().split('T')[0];
-    fieldFecha.setAttribute('min', localISOTime);
+    if(fieldFecha) fieldFecha.setAttribute('min', localISOTime);
+    if(adminFecha) adminFecha.setAttribute('min', localISOTime);
 }
 
 function isWeekend(dateString) {
@@ -492,6 +529,101 @@ async function handleReservaSubmit(e) {
     } finally {
         btnSubmitReserva.disabled = false;
         btnSubmitReserva.textContent = "Enviar Solicitud";
+    }
+}
+
+// --- LOGICA FORMULARIO ADMIN ASIGNACION ---
+function handleAdminFechaChange() {
+    const fecha = adminFecha.value;
+    
+    adminBloque.innerHTML = '<option value="">Seleccione un bloque...</option>';
+    adminBloque.disabled = true;
+
+    if (!fecha) return;
+
+    if (isWeekend(fecha)) {
+        alert("Atención: Solo se puede reservar la sala de lunes a viernes.");
+        adminFecha.value = "";
+        return;
+    }
+
+    const blocksData = getAvailableBlocks(fecha);
+    
+    blocksData.base.forEach(b => {
+        const option = document.createElement('option');
+        option.value = b;
+        option.textContent = b;
+        
+        if (blocksData.reserved[b]) {
+            option.disabled = true;
+            option.textContent += ` (Ocupado por ${blocksData.reserved[b]})`;
+        }
+        
+        adminBloque.appendChild(option);
+    });
+
+    adminBloque.disabled = false;
+}
+
+async function handleAdminReservaSubmit(e) {
+    e.preventDefault();
+
+    const selectEl = document.getElementById('adminSelectProfesor');
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    const uidDocente = selectEl.value;
+    const profesor = selectedOption.dataset.nombre;
+    
+    const fecha = adminFecha.value;
+    const bloque = adminBloque.value;
+    const curso = adminCurso.value;
+    const asignatura = adminAsignatura.value;
+    const objetivo = adminObjetivo.value.trim();
+
+    // Verificación sincrónica de límites del mes
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const selectedDate = new Date(`${fecha}T00:00:00`);
+    if (selectedDate.getMonth() !== currentMonth || selectedDate.getFullYear() !== currentYear) {
+        alert("Las reservas solo están permitidas para el mes en curso.");
+        adminFecha.value = "";
+        handleAdminFechaChange();
+        return;
+    }
+
+    const blocksData = getAvailableBlocks(fecha);
+    if (blocksData.reserved[bloque]) {
+        alert("Error crítico: El bloque seleccionado acaba de ser reservado. Por favor elija otro.");
+        handleAdminFechaChange();
+        return;
+    }
+
+    btnAdminSubmitReserva.disabled = true;
+    btnAdminSubmitReserva.textContent = "Cargando...";
+
+    try {
+        await addDoc(reservasRef, {
+            profesor, // Nombre real del profesor listado
+            uidDocente, // ID real para vincular la reserva al perfil del profe
+            fecha,
+            bloque,
+            curso,
+            asignatura,
+            objetivo,
+            estado: 'Pendiente', 
+            createdAt: serverTimestamp() 
+        });
+        
+        showToast("Asignación registrada exitosamente");
+        
+        adminReservaForm.reset();
+        adminBloque.innerHTML = '<option value="">Seleccione una fecha primero...</option>';
+        adminBloque.disabled = true;
+    } catch(err) {
+        console.error("Error al guardar reserva: ", err);
+        alert("Ha ocurrido un error al asignar.");
+    } finally {
+        btnAdminSubmitReserva.disabled = false;
+        btnAdminSubmitReserva.textContent = "Asignar Reserva";
     }
 }
 
