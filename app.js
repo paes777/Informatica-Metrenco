@@ -468,6 +468,11 @@ async function handleReservaSubmit(e) {
         reservaForm.reset();
         fieldBloque.innerHTML = '<option value="">Seleccione una fecha primero...</option>';
         fieldBloque.disabled = true;
+        
+        // Restaurar nombre del docente
+        if (currentDocente) {
+            fieldProfesor.value = currentDocente.nombre;
+        }
     } catch(err) {
         console.error("Error al guardar reserva: ", err);
         alert("Ha ocurrido un error de conexión al enviar. Verifique su internet y reintente.");
