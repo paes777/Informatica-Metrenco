@@ -295,7 +295,10 @@ async function handleDocenteLogin(e) {
     e.preventDefault();
     const user = document.getElementById('docenteUserLogin').value.trim();
     const pass = document.getElementById('docentePassLogin').value;
-    const dummyEmail = `${user}@docente.metrenco.cl`;
+    
+    // Crear un email interno válido quitando espacios y caracteres especiales
+    const safeUser = user.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const dummyEmail = `${safeUser}@docente.metrenco.cl`;
     
     try {
         await signInWithEmailAndPassword(auth, dummyEmail, pass);
@@ -321,14 +324,22 @@ async function handleDocenteRegister(e) {
         return;
     }
     
-    const dummyEmail = `${user}@docente.metrenco.cl`;
+    // Crear un email interno válido quitando espacios y caracteres especiales
+    const safeUser = user.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (safeUser.length === 0) {
+        docenteRegError.textContent = "El usuario debe contener al menos una letra o número válido.";
+        docenteRegError.classList.remove('d-none');
+        return;
+    }
+
+    const dummyEmail = `${safeUser}@docente.metrenco.cl`;
     
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, dummyEmail, pass);
-        // Crear documento del docente en Firestore
+        // Crear documento del docente en Firestore usando el usuario tal cual lo escribió
         await setDoc(doc(db, "docentes", userCredential.user.uid), {
             nombre: nombre,
-            usuario: user
+            usuario: user // Guardamos el formato original del usuario aquí
         });
         
         docenteRegisterForm.reset();
@@ -339,6 +350,8 @@ async function handleDocenteRegister(e) {
             docenteRegError.textContent = "El nombre de usuario ya está registrado.";
         } else if(err.code === 'auth/weak-password') {
             docenteRegError.textContent = "La contraseña debe tener al menos 6 caracteres.";
+        } else if(err.code === 'auth/invalid-email') {
+             docenteRegError.textContent = "El nombre de usuario contiene caracteres no válidos para el registro.";
         } else {
             docenteRegError.textContent = "Error al registrar: " + err.message;
         }
