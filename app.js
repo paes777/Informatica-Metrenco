@@ -138,7 +138,8 @@ function handleDocenteLoggedIn() {
     
     // Auth UI state
     fieldProfesor.value = currentDocente.nombre;
-    fieldProfesor.defaultValue = currentDocente.nombre; // Para que el reset() automático no lo borre permanentemente
+    fieldProfesor.placeholder = currentDocente.nombre; // Cambiamos el placeholder directamente
+    fieldProfesor.defaultValue = currentDocente.nombre; 
     fieldFecha.disabled = false;
     btnSubmitReserva.disabled = false;
     
@@ -473,6 +474,8 @@ async function handleReservaSubmit(e) {
         // Restaurar nombre del docente
         if (currentDocente) {
             fieldProfesor.value = currentDocente.nombre;
+            fieldProfesor.placeholder = currentDocente.nombre;
+            fieldProfesor.setAttribute('value', currentDocente.nombre);
         }
 
         // Refrescar página después de 1.5 segundos para forzar actualización de la vista
