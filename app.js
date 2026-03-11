@@ -468,6 +468,7 @@ async function handleReservaSubmit(e) {
         reservaForm.reset();
         if (currentDocente) {
             fieldProfesor.value = currentDocente.nombre;
+            fieldProfesor.disabled = true; // explicitly re-disable just in case
         }
         
         fieldBloque.innerHTML = '<option value="">Seleccione una fecha primero...</option>';
