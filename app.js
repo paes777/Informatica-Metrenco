@@ -124,6 +124,14 @@ function init() {
 function listenToAuth() {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
+            // Check if admin
+            if (user.email === 'admin@admin.metrenco.cl') {
+                isAdminLogged = true;
+                currentDocente = null;
+                showAdminDashboard();
+                return;
+            }
+
             // Obtener info del docente desde Firestore
             const docRef = doc(db, "docentes", user.uid);
             const docSnap = await getDoc(docRef);
@@ -136,6 +144,7 @@ function listenToAuth() {
             }
         } else {
             currentDocente = null;
+            isAdminLogged = false;
             handleDocenteLoggedOut();
         }
     });
@@ -628,12 +637,29 @@ async function handleAdminReservaSubmit(e) {
 }
 
 // --- LÓGICA DE ADMINISTRADOR ---
-function handleLogin(e) {
+async function handleLogin(e) {
     e.preventDefault();
     const user = document.getElementById('username').value;
     const pass = document.getElementById('password').value;
 
     if (user === 'admin' && pass === 'admin123') {
+        const adminEmail = 'admin@admin.metrenco.cl';
+        const loginBtn = document.querySelector('#loginForm button[type="submit"]');
+        if(loginBtn) loginBtn.textContent = "Ingresando...";
+
+        try {
+            await signInWithEmailAndPassword(auth, adminEmail, pass);
+        } catch(err) {
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+                try {
+                    await createUserWithEmailAndPassword(auth, adminEmail, pass);
+                } catch(regErr) {
+                    console.error("Error creando cuenta admin ", regErr);
+                }
+            }
+        }
+        if(loginBtn) loginBtn.textContent = "Ingresar";
+
         isAdminLogged = true;
         loginForm.reset();
         showAdminDashboard();
@@ -644,6 +670,7 @@ function handleLogin(e) {
 
 function handleLogout() {
     isAdminLogged = false;
+    signOut(auth);
     showDocenteAuthView();
 }
 
