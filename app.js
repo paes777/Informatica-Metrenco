@@ -51,6 +51,9 @@ const BLOCKS_FRI = [
     "12:00 a 13:30"
 ];
 
+const BRIDGE_EMAIL = "acceso_docentes@docente.metrenco.cl";
+const BRIDGE_PASS = "SistemaMetrencoAdminBD_2026!";
+
 // --- ESTADO INICIAL ---
 let reservas = []; // Se poblará desde Firebase Firestore
 let docentesLista = []; // Se poblará desde Firebase Firestore
@@ -114,6 +117,12 @@ const adminAsignatura = document.getElementById('adminAsignatura');
 const adminObjetivo = document.getElementById('adminObjetivo');
 const btnAdminSubmitReserva = document.getElementById('btnAdminSubmitReserva');
 
+// Formulario Cambio Contraseñas Admin
+const adminPasswordForm = document.getElementById('adminPasswordForm');
+const adminSelectPassProfesor = document.getElementById('adminSelectPassProfesor');
+const adminNewPassword = document.getElementById('adminNewPassword');
+const passChangeSuccess = document.getElementById('passChangeSuccess');
+
 // --- INICIALIZACIÓN ---
 function init() {
     setupEventListeners();
@@ -133,17 +142,30 @@ function listenToAuth() {
                 return;
             }
 
-            // Obtener info del docente desde Firestore
-            const docRef = doc(db, "docentes", user.uid);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                currentDocente = { uid: user.uid, ...docSnap.data() };
-                listenToFirestore(); // <-- Start listening after authentication
-                handleDocenteLoggedIn();
-            } else {
-                // Posible error o es otro tipo de usuario
-                auth.signOut();
+            // Si es la cuenta puente (docentes)
+            if (user.email === BRIDGE_EMAIL) {
+                const savedId = localStorage.getItem('loggedDocenteId');
+                if (savedId) {
+                    const docSnap = await getDoc(doc(db, "docentes", savedId));
+                    if (docSnap.exists()) {
+                        currentDocente = { uid: docSnap.id, ...docSnap.data() };
+                        listenToFirestore();
+                        handleDocenteLoggedIn();
+                    } else {
+                        // Docente fue borrado
+                        localStorage.removeItem('loggedDocenteId');
+                        currentDocente = null;
+                        handleDocenteLoggedOut();
+                    }
+                } else {
+                    currentDocente = null;
+                    handleDocenteLoggedOut();
+                }
+                return;
             }
+
+            // Migración: si entran con su cuenta antigua, los expulsamos a favor del nuevo sistema
+            auth.signOut();
         } else {
             currentDocente = null;
             isAdminLogged = false;
@@ -185,7 +207,11 @@ function setupEventListeners() {
     navAdminBtn.addEventListener('click', showAdminLogin);
     navDocenteLoginBtn.addEventListener('click', showDocenteAuthView);
     btnLogout.addEventListener('click', handleLogout);
-    logoutDocenteBtn.addEventListener('click', () => signOut(auth));
+    logoutDocenteBtn.addEventListener('click', () => {
+        localStorage.removeItem('loggedDocenteId');
+        currentDocente = null;
+        handleDocenteLoggedOut();
+    });
 
     // Eventos Formulario Docente
     fieldFecha.addEventListener('change', handleFechaChange);
@@ -199,6 +225,7 @@ function setupEventListeners() {
 
     // Eventos Admin Login
     loginForm.addEventListener('submit', handleLogin);
+    if (adminPasswordForm) adminPasswordForm.addEventListener('submit', handleAdminPasswordChange);
 
     // Eventos Formulario Admin Asignación
     if (adminFecha) adminFecha.addEventListener('change', handleAdminFechaChange);
@@ -234,24 +261,33 @@ function listenToFirestore() {
     onSnapshot(docentesRef, (snapshot) => {
         docentesLista = [];
         if(adminSelectProfesor) adminSelectProfesor.innerHTML = '<option value="">Seleccione un profesor...</option>';
+        if(adminSelectPassProfesor) adminSelectPassProfesor.innerHTML = '<option value="">Seleccione un profesor...</option>';
         
         snapshot.forEach((docSnap) => {
             docentesLista.push({ uid: docSnap.id, ...docSnap.data() });
         });
         
-        if(adminSelectProfesor) {
-            docentesLista.sort((a,b) => {
-                const nameA = a.nombre || "";
-                const nameB = b.nombre || "";
-                return nameA.localeCompare(nameB);
-            }).forEach(docente => {
+        const sortedList = docentesLista.sort((a,b) => {
+            const nameA = a.nombre || "";
+            const nameB = b.nombre || "";
+            return nameA.localeCompare(nameB);
+        });
+
+        sortedList.forEach(docente => {
+            if(adminSelectProfesor) {
                 const option = document.createElement('option');
                 option.value = docente.uid;
                 option.textContent = docente.nombre || "Sin nombre";
                 option.dataset.nombre = docente.nombre || "Sin nombre";
                 adminSelectProfesor.appendChild(option);
-            });
-        }
+            }
+            if(adminSelectPassProfesor) {
+                const opt2 = document.createElement('option');
+                opt2.value = docente.uid;
+                opt2.textContent = (docente.nombre || "Sin nombre") + (!docente.password ? ' (⚠️ Sin Clave)' : '');
+                adminSelectPassProfesor.appendChild(opt2);
+            }
+        });
     });
 
     isFirestoreListening = true;
@@ -351,16 +387,50 @@ async function handleDocenteLogin(e) {
     const user = document.getElementById('docenteUserLogin').value.trim();
     const pass = document.getElementById('docentePassLogin').value;
     
-    // Crear un email interno válido quitando espacios y caracteres especiales
-    const safeUser = user.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const dummyEmail = `${safeUser}@docente.metrenco.cl`;
-    
     try {
-        await signInWithEmailAndPassword(auth, dummyEmail, pass);
-        docenteLoginForm.reset();
-        docenteLoginError.classList.add('d-none');
+        if (!auth.currentUser || auth.currentUser.email !== BRIDGE_EMAIL) {
+            try {
+                await signInWithEmailAndPassword(auth, BRIDGE_EMAIL, BRIDGE_PASS);
+            } catch(e) {
+                if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+                    await createUserWithEmailAndPassword(auth, BRIDGE_EMAIL, BRIDGE_PASS);
+                } else throw e;
+            }
+        }
+
+        const querySnapshot = await getDocs(docentesRef);
+        let match = null;
+        let requiresAdminReset = false;
+
+        const inputSafeUser = user.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const dbSafeUser = (data.usuario || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (dbSafeUser === inputSafeUser) {
+                if (!data.password) requiresAdminReset = true;
+                if (data.password === pass) {
+                    match = { uid: docSnap.id, ...data };
+                }
+            }
+        });
+
+        if (match) {
+            localStorage.setItem('loggedDocenteId', match.uid);
+            currentDocente = match;
+            docenteLoginForm.reset();
+            docenteLoginError.classList.add('d-none');
+            listenToFirestore();
+            handleDocenteLoggedIn();
+        } else if (requiresAdminReset) {
+            docenteLoginError.textContent = "Tu contraseña ha expirado debido a mejoras de seguridad. Solicita al administrador tu nueva contraseña temporal.";
+            docenteLoginError.classList.remove('d-none');
+        } else {
+            docenteLoginError.textContent = "Credenciales incorrectas o usuario no existe.";
+            docenteLoginError.classList.remove('d-none');
+        }
     } catch(err) {
-        docenteLoginError.textContent = "Credenciales incorrectas o usuario no existe.";
+        docenteLoginError.textContent = "Error interno o de conexión.";
         docenteLoginError.classList.remove('d-none');
         console.error(err);
     }
@@ -379,37 +449,51 @@ async function handleDocenteRegister(e) {
         return;
     }
     
-    // Crear un email interno válido quitando espacios y caracteres especiales
     const safeUser = user.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (safeUser.length === 0) {
         docenteRegError.textContent = "El usuario debe contener al menos una letra o número válido.";
         docenteRegError.classList.remove('d-none');
         return;
     }
-
-    const dummyEmail = `${safeUser}@docente.metrenco.cl`;
     
     try {
-        const userCredential = await createUserWithEmailAndPassword(auth, dummyEmail, pass);
-        // Crear documento del docente en Firestore usando el usuario tal cual lo escribió
-        await setDoc(doc(db, "docentes", userCredential.user.uid), {
+        if (!auth.currentUser || auth.currentUser.email !== BRIDGE_EMAIL) {
+            try {
+                await signInWithEmailAndPassword(auth, BRIDGE_EMAIL, BRIDGE_PASS);
+            } catch(e) {
+                if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+                    await createUserWithEmailAndPassword(auth, BRIDGE_EMAIL, BRIDGE_PASS);
+                } else throw e;
+            }
+        }
+
+        const q = query(docentesRef, where("usuario", "==", user)); // En registro verificamos contra escrito exacto preferentemente, o escaneamos
+        let usernameExists = false;
+        const scanSnapshot = await getDocs(docentesRef);
+        scanSnapshot.forEach(docSnap => {
+             const data = docSnap.data();
+             const dbSafeUser = (data.usuario || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+             if (dbSafeUser === safeUser) usernameExists = true;
+        });
+
+        if (usernameExists) {
+            docenteRegError.textContent = "El nombre de usuario ya está registrado.";
+            docenteRegError.classList.remove('d-none');
+            return;
+        }
+
+        await addDoc(docentesRef, {
             nombre: nombre,
-            usuario: user // Guardamos el formato original del usuario aquí
+            usuario: user, 
+            password: pass // Guardado directo a DB
         });
         
         docenteRegisterForm.reset();
         docenteRegError.classList.add('d-none');
         showToast("Cuenta creada exitosamente");
+        switchDocenteAuthTab('login');
     } catch(err) {
-        if(err.code === 'auth/email-already-in-use') {
-            docenteRegError.textContent = "El nombre de usuario ya está registrado.";
-        } else if(err.code === 'auth/weak-password') {
-            docenteRegError.textContent = "La contraseña debe tener al menos 6 caracteres.";
-        } else if(err.code === 'auth/invalid-email') {
-             docenteRegError.textContent = "El nombre de usuario contiene caracteres no válidos para el registro.";
-        } else {
-            docenteRegError.textContent = "Error al registrar: " + err.message;
-        }
+        docenteRegError.textContent = "Error al registrar: " + err.message;
         docenteRegError.classList.remove('d-none');
         console.error(err);
     }
@@ -643,6 +727,38 @@ async function handleAdminReservaSubmit(e) {
     } finally {
         btnAdminSubmitReserva.disabled = false;
         btnAdminSubmitReserva.textContent = "Asignar Reserva";
+    }
+}
+
+async function handleAdminPasswordChange(e) {
+    e.preventDefault();
+    const uid = adminSelectPassProfesor.value;
+    const newPass = adminNewPassword.value;
+    
+    if (!uid) {
+        alert("Seleccione un profesor");
+        return;
+    }
+    
+    const btn = document.getElementById('btnAdminSubmitPassword');
+    btn.disabled = true;
+    btn.textContent = "Actualizando...";
+    
+    try {
+        await updateDoc(doc(db, "docentes", uid), {
+            password: newPass
+        });
+        
+        passChangeSuccess.classList.remove('d-none');
+        adminPasswordForm.reset();
+        
+        setTimeout(() => passChangeSuccess.classList.add('d-none'), 4000);
+    } catch(err) {
+        console.error(err);
+        alert("Ocurrió un error al actualizar.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Actualizar Contraseña";
     }
 }
 
