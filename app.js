@@ -274,17 +274,20 @@ function listenToFirestore() {
         });
 
         sortedList.forEach(docente => {
+            const nombreMostrar = docente.nombre || "Sin nombre";
+            const textoDisplay = docente.usuario ? `${nombreMostrar} (${docente.usuario})` : nombreMostrar;
+            
             if(adminSelectProfesor) {
                 const option = document.createElement('option');
                 option.value = docente.uid;
-                option.textContent = docente.nombre || "Sin nombre";
-                option.dataset.nombre = docente.nombre || "Sin nombre";
+                option.textContent = textoDisplay;
+                option.dataset.nombre = nombreMostrar; // Se guarda el nombre original limpio para la asignación
                 adminSelectProfesor.appendChild(option);
             }
             if(adminSelectPassProfesor) {
                 const opt2 = document.createElement('option');
                 opt2.value = docente.uid;
-                opt2.textContent = (docente.nombre || "Sin nombre") + (!docente.password ? ' (⚠️ Sin Clave)' : '');
+                opt2.textContent = textoDisplay + (!docente.password ? ' (⚠️ Sin Clave)' : '');
                 adminSelectPassProfesor.appendChild(opt2);
             }
         });
