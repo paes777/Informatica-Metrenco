@@ -56,6 +56,7 @@ let reservas = []; // Se poblará desde Firebase Firestore
 let docentesLista = []; // Se poblará desde Firebase Firestore
 let isAdminLogged = false;
 let currentDocente = null; // { uid, nombre, usuario }
+let isFirestoreListening = false; // Flag para evitar múltiples listeners
 
 // --- REFERENCIAS AL DOM ---
 const viewDocenteAuth = document.getElementById('docenteAuthView'); // La principal ahora
@@ -118,7 +119,6 @@ function init() {
     setupEventListeners();
     setMinDate();
     listenToAuth();
-    listenToFirestore();
 }
 
 function listenToAuth() {
@@ -128,6 +128,7 @@ function listenToAuth() {
             if (user.email === 'admin@admin.metrenco.cl') {
                 isAdminLogged = true;
                 currentDocente = null;
+                listenToFirestore(); // <-- Start listening after authentication
                 showAdminDashboard();
                 return;
             }
@@ -137,6 +138,7 @@ function listenToAuth() {
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 currentDocente = { uid: user.uid, ...docSnap.data() };
+                listenToFirestore(); // <-- Start listening after authentication
                 handleDocenteLoggedIn();
             } else {
                 // Posible error o es otro tipo de usuario
@@ -210,6 +212,8 @@ function setupEventListeners() {
 
 // --- LOGICA CORE FIREBASE LECTURAS EN TIEMPO REAL ---
 function listenToFirestore() {
+    if (isFirestoreListening) return;
+    
     const q = query(reservasRef, orderBy("createdAt", "desc"));
     onSnapshot(q, (snapshot) => {
         reservas = [];
@@ -236,15 +240,21 @@ function listenToFirestore() {
         });
         
         if(adminSelectProfesor) {
-            docentesLista.sort((a,b) => a.nombre.localeCompare(b.nombre)).forEach(docente => {
+            docentesLista.sort((a,b) => {
+                const nameA = a.nombre || "";
+                const nameB = b.nombre || "";
+                return nameA.localeCompare(nameB);
+            }).forEach(docente => {
                 const option = document.createElement('option');
                 option.value = docente.uid;
-                option.textContent = docente.nombre;
-                option.dataset.nombre = docente.nombre;
+                option.textContent = docente.nombre || "Sin nombre";
+                option.dataset.nombre = docente.nombre || "Sin nombre";
                 adminSelectProfesor.appendChild(option);
             });
         }
     });
+
+    isFirestoreListening = true;
 }
 
 function showToast(msg) {
@@ -700,7 +710,9 @@ function renderDashboard() {
         if (dateB.getTime() !== dateA.getTime()){
             return dateB - dateA; 
         }
-        return a.bloque.localeCompare(b.bloque);
+        const bloqueA = a.bloque || "";
+        const bloqueB = b.bloque || "";
+        return bloqueA.localeCompare(bloqueB);
     });
 
     sortedReservas.forEach(res => {
@@ -790,7 +802,9 @@ function renderDocenteDashboard() {
         if (dateB.getTime() !== dateA.getTime()){
             return dateB - dateA; 
         }
-        return a.bloque.localeCompare(b.bloque);
+        const bloqueA = a.bloque || "";
+        const bloqueB = b.bloque || "";
+        return bloqueA.localeCompare(bloqueB);
     });
 
     const now = new Date();
@@ -913,7 +927,9 @@ function handleExportPDF() {
         if (dateB.getTime() !== dateA.getTime()){
             return dateA - dateB; // chronological past to future for reports
         }
-        return a.bloque.localeCompare(b.bloque);
+        const bloqueA = a.bloque || "";
+        const bloqueB = b.bloque || "";
+        return bloqueA.localeCompare(bloqueB);
     });
 
     try {
